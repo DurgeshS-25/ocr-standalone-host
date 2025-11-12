@@ -1,18 +1,21 @@
 import { useState, useEffect } from "react";
-import { supabase } from "./supabaseClient";
+import { createClient } from "@supabase/supabase-js";
 import { processLabReportWithEdgeFunction } from "./ocrModule";
+
+// Inline Supabase client - no separate file needed
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 function App() {
   const [session, setSession] = useState<any>(null);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   
-  // Auth form
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   
-  // Upload form
   const [panelName, setPanelName] = useState("");
   const [collectionDate, setCollectionDate] = useState("");
   const [labProvider, setLabProvider] = useState("");
@@ -147,14 +150,13 @@ function App() {
     }
   };
 
-  // Login/Signup Page
   if (!session) {
     return (
       <div style={styles.page}>
         <div style={styles.authContainer}>
           <div style={styles.authCard}>
             <h1 style={styles.title}>🧠 Lab Report Extractor</h1>
-            <p style={styles.subtitle}>Vision API OCR Only</p>
+            <p style={styles.subtitle}>Vision API + Gemini AI</p>
 
             <div style={styles.tabs}>
               <button
@@ -250,13 +252,12 @@ function App() {
     );
   }
 
-  // Main App (After Login)
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <div>
           <h2 style={{ margin: 0, fontSize: "1.5rem" }}>Welcome, {session.user.email}</h2>
-          <p style={{ margin: "0.25rem 0 0 0", color: "#888" }}>Vision API OCR Only</p>
+          <p style={{ margin: "0.25rem 0 0 0", color: "#888" }}>Vision API + Gemini AI</p>
         </div>
         <button onClick={handleLogout} style={styles.btnOutline}>
           Logout
@@ -390,205 +391,39 @@ const getStatusBadge = (status: string) => ({
   borderRadius: "12px",
   fontSize: "0.8rem",
   fontWeight: 600,
-  background: status === "high" || status === "low" || status === "critical" 
-    ? "#fee" 
-    : "#efe",
-  color: status === "high" || status === "low" || status === "critical"
-    ? "#c00"
-    : "#060",
+  background: status === "high" || status === "low" || status === "critical" ? "#fee" : "#efe",
+  color: status === "high" || status === "low" || status === "critical" ? "#c00" : "#060",
 });
 
 const styles = {
-  page: {
-    background: "#050816",
-    color: "#fff",
-    minHeight: "100vh",
-    padding: "2rem",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-  authContainer: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    minHeight: "80vh",
-  },
-  authCard: {
-    background: "#0b1020",
-    padding: "2.5rem",
-    borderRadius: "16px",
-    border: "1px solid rgba(255,255,255,0.1)",
-    maxWidth: "500px",
-    width: "100%",
-  },
-  title: {
-    fontSize: "2rem",
-    marginBottom: "0.5rem",
-    textAlign: "center" as const,
-  },
-  subtitle: {
-    textAlign: "center" as const,
-    color: "#888",
-    marginBottom: "2rem",
-  },
-  tabs: {
-    display: "flex",
-    gap: "0.5rem",
-    marginBottom: "2rem",
-    background: "#050816",
-    padding: "0.25rem",
-    borderRadius: "8px",
-  },
-  tab: {
-    flex: 1,
-    padding: "0.75rem",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontSize: "0.95rem",
-    fontWeight: 600,
-  },
-  activeTab: {
-    background: "#007bff",
-    color: "#fff",
-  },
-  inactiveTab: {
-    background: "transparent",
-    color: "#888",
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "1.25rem",
-  },
-  nameRow: {
-    display: "flex",
-    gap: "1rem",
-  },
-  label: {
-    display: "block",
-    marginBottom: "0.4rem",
-    fontSize: "0.9rem",
-    color: "#aaa",
-    fontWeight: 500,
-  },
-  input: {
-    width: "100%",
-    padding: "0.75rem",
-    borderRadius: "8px",
-    border: "1px solid #444",
-    background: "#050816",
-    color: "#fff",
-    fontSize: "0.95rem",
-    boxSizing: "border-box" as const,
-  },
-  btn: {
-    background: "#007bff",
-    border: "none",
-    borderRadius: "8px",
-    padding: "0.875rem",
-    color: "#fff",
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: "1rem",
-  },
-  btnDisabled: {
-    background: "#555",
-    border: "none",
-    borderRadius: "8px",
-    padding: "0.875rem",
-    color: "#fff",
-    cursor: "not-allowed",
-    fontWeight: 600,
-    fontSize: "1rem",
-    opacity: 0.5,
-  },
-  btnOutline: {
-    background: "transparent",
-    border: "1px solid #007bff",
-    borderRadius: "8px",
-    padding: "0.5rem 1.25rem",
-    color: "#007bff",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-  errorBox: {
-    padding: "0.875rem",
-    background: "#3a1a1a",
-    border: "1px solid #5a2a2a",
-    borderRadius: "8px",
-    marginTop: "1rem",
-    color: "#ff6b6b",
-  },
-  successBox: {
-    padding: "0.875rem",
-    background: "#1a3a1a",
-    border: "1px solid #2a5a2a",
-    borderRadius: "8px",
-    marginTop: "1rem",
-    color: "#90ee90",
-  },
-  progressBox: {
-    padding: "0.875rem",
-    background: "#1a2a3a",
-    border: "1px solid #2a4a5a",
-    borderRadius: "8px",
-    marginTop: "1rem",
-    color: "#aaa",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "2rem",
-    padding: "1.5rem",
-    background: "#0b1020",
-    borderRadius: "12px",
-    border: "1px solid rgba(255,255,255,0.1)",
-  },
-  card: {
-    background: "#0b1020",
-    padding: "1.5rem",
-    marginTop: "1.5rem",
-    borderRadius: "12px",
-    border: "1px solid rgba(255,255,255,0.1)",
-  },
-  uploadForm: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "1.25rem",
-  },
-  patientGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: "1rem",
-    padding: "1rem",
-    background: "#050816",
-    borderRadius: "8px",
-    fontSize: "0.95rem",
-  },
-  tableContainer: {
-    overflowX: "auto" as const,
-    marginTop: "1rem",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse" as const,
-    fontSize: "0.9rem",
-  },
-  th: {
-    padding: "0.75rem",
-    textAlign: "left" as const,
-    borderBottom: "2px solid #444",
-    color: "#aaa",
-    fontWeight: 600,
-  },
-  td: {
-    padding: "0.75rem",
-    borderBottom: "1px solid #333",
-  },
-  tr: {
-    transition: "background 0.2s",
-  },
+  page: { background: "#050816", color: "#fff", minHeight: "100vh", padding: "2rem", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
+  authContainer: { display: "flex", justifyContent: "center", alignItems: "center", minHeight: "80vh" },
+  authCard: { background: "#0b1020", padding: "2.5rem", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.1)", maxWidth: "500px", width: "100%" },
+  title: { fontSize: "2rem", marginBottom: "0.5rem", textAlign: "center" as const },
+  subtitle: { textAlign: "center" as const, color: "#888", marginBottom: "2rem" },
+  tabs: { display: "flex", gap: "0.5rem", marginBottom: "2rem", background: "#050816", padding: "0.25rem", borderRadius: "8px" },
+  tab: { flex: 1, padding: "0.75rem", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "0.95rem", fontWeight: 600 },
+  activeTab: { background: "#007bff", color: "#fff" },
+  inactiveTab: { background: "transparent", color: "#888" },
+  form: { display: "flex", flexDirection: "column" as const, gap: "1.25rem" },
+  nameRow: { display: "flex", gap: "1rem" },
+  label: { display: "block", marginBottom: "0.4rem", fontSize: "0.9rem", color: "#aaa", fontWeight: 500 },
+  input: { width: "100%", padding: "0.75rem", borderRadius: "8px", border: "1px solid #444", background: "#050816", color: "#fff", fontSize: "0.95rem", boxSizing: "border-box" as const },
+  btn: { background: "#007bff", border: "none", borderRadius: "8px", padding: "0.875rem", color: "#fff", cursor: "pointer", fontWeight: 600, fontSize: "1rem" },
+  btnDisabled: { background: "#555", border: "none", borderRadius: "8px", padding: "0.875rem", color: "#fff", cursor: "not-allowed", fontWeight: 600, fontSize: "1rem", opacity: 0.5 },
+  btnOutline: { background: "transparent", border: "1px solid #007bff", borderRadius: "8px", padding: "0.5rem 1.25rem", color: "#007bff", cursor: "pointer", fontWeight: 600 },
+  errorBox: { padding: "0.875rem", background: "#3a1a1a", border: "1px solid #5a2a2a", borderRadius: "8px", marginTop: "1rem", color: "#ff6b6b" },
+  successBox: { padding: "0.875rem", background: "#1a3a1a", border: "1px solid #2a5a2a", borderRadius: "8px", marginTop: "1rem", color: "#90ee90" },
+  progressBox: { padding: "0.875rem", background: "#1a2a3a", border: "1px solid #2a4a5a", borderRadius: "8px", marginTop: "1rem", color: "#aaa" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", padding: "1.5rem", background: "#0b1020", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)" },
+  card: { background: "#0b1020", padding: "1.5rem", marginTop: "1.5rem", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)" },
+  uploadForm: { display: "flex", flexDirection: "column" as const, gap: "1.25rem" },
+  patientGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", padding: "1rem", background: "#050816", borderRadius: "8px", fontSize: "0.95rem" },
+  tableContainer: { overflowX: "auto" as const, marginTop: "1rem" },
+  table: { width: "100%", borderCollapse: "collapse" as const, fontSize: "0.9rem" },
+  th: { padding: "0.75rem", textAlign: "left" as const, borderBottom: "2px solid #444", color: "#aaa", fontWeight: 600 },
+  td: { padding: "0.75rem", borderBottom: "1px solid #333" },
+  tr: { transition: "background 0.2s" },
 };
 
 export default App;

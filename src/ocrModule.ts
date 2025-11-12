@@ -1,6 +1,11 @@
 import * as pdfjsLib from "pdfjs-dist";
 import "pdfjs-dist/build/pdf.worker.mjs";
-import { supabase } from "./supabaseClient";
+import { createClient } from "@supabase/supabase-js";
+
+// Inline Supabase client
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const pdfToBase64Image = async (file: File): Promise<string> => {
   const arrayBuffer = await file.arrayBuffer();
@@ -24,44 +29,21 @@ export const processLabReportWithEdgeFunction = async (
   labProvider: string
 ) => {
   try {
-    console.log("=== START OCR PROCESSING ===");
     console.log("📄 Converting PDF to base64...");
     const base64Image = await pdfToBase64Image(file);
-    console.log("✅ Base64 length:", base64Image.length);
     
     console.log("☁️ Calling Edge Function...");
     const { data, error } = await supabase.functions.invoke('process-lab-report', {
-      body: { 
-        base64Image, 
-        userId, 
-        panelName, 
-        collectionDate, 
-        labProvider, 
-        fileName: file.name 
-      }
+      body: { base64Image, userId, panelName, collectionDate, labProvider, fileName: file.name }
     });
     
-    console.log("📦 Edge Function Response:", data);
-    console.log("❌ Edge Function Error:", error);
+    if (error) throw error;
+    if (!data || !data.success) throw new Error(data?.error || 'Processing failed');
     
-    if (error) {
-      console.error("❌ Edge Function error details:", error);
-      throw error;
-    }
-    
-    if (!data || !data.success) {
-      console.error("❌ Processing failed:", data);
-      throw new Error(data?.error || 'Processing failed');
-    }
-    
-    console.log("📝 Extracted Text (first 500 chars):", data.extractedText);
-    console.log("👤 Patient Info:", data.patient);
-    console.log("🧪 Biomarkers:", data.biomarkers);
-    console.log("=== END OCR PROCESSING ===");
-    
+    console.log("✅ Success:", data);
     return data;
   } catch (error) {
-    console.error("💥 Process failed:", error);
+    console.error("💥 Error:", error);
     throw error;
   }
 };
