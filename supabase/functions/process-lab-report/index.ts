@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
 serve(async (req) => {
@@ -21,7 +21,8 @@ serve(async (req) => {
       throw new Error('Missing API keys in Supabase secrets');
     }
 
-    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
     const { base64Image, userId, panelName, collectionDate, labProvider, fileName } = await req.json();
 
     if (!base64Image || !userId) {
@@ -30,20 +31,62 @@ serve(async (req) => {
 
     console.log('📄 Starting OCR process for user:', userId);
 
-    const { data: existingProfile } = await supabase.from('profiles').select('id').eq('id', userId).single();
+    // Check/create profile
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .single();
 
     if (!existingProfile) {
       console.log('Creating profile for user:', userId);
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: userId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
       if (profileError) {
         throw new Error(`Failed to create profile: ${profileError.message}`);
       }
     }
 
+    // 📦 UPLOAD FILE TO STORAGE
+    console.log('📦 Uploading file to storage...');
+    
+    // Convert base64 to binary
+    const base64Data = base64Image.replace(/^data:.*?;base64,/, '');
+    const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+    
+    // Generate unique file name with timestamp
+    const timestamp = new Date().getTime();
+    const fileExtension = fileName?.split('.').pop() || 'pdf';
+    const storagePath = `${userId}/${timestamp}_${fileName || `report.${fileExtension}`}`;
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('lab-reports')
+      .upload(storagePath, binaryData, {
+        contentType: 'application/pdf',
+        upsert: false
+      });
+
+    if (uploadError) {
+      throw new Error(`Storage upload failed: ${uploadError.message}`);
+    }
+
+    console.log('✅ File uploaded to storage:', uploadData.path);
+
+    // Get public URL (optional, if bucket is public)
+    const { data: urlData } = supabase.storage
+      .from('lab-reports')
+      .getPublicUrl(storagePath);
+
+    const fileUrl = urlData.publicUrl;
+    console.log('🔗 File URL:', fileUrl);
+
+    // Continue with OCR process
     console.log('🔍 Calling Vision API...');
     const visionResponse = await fetch(
       `https://vision.googleapis.com/v1/images:annotate?key=${VISION_API_KEY}`,
@@ -65,19 +108,18 @@ serve(async (req) => {
     }
 
     const visionData = await visionResponse.json();
-    
     if (visionData.responses[0].error) {
       throw new Error(`Vision API error: ${visionData.responses[0].error.message}`);
     }
 
     const extractedText = visionData.responses[0].fullTextAnnotation?.text || '';
-
     if (!extractedText || extractedText.length < 40) {
       throw new Error('Extracted text too short or empty');
     }
 
     console.log('✅ Vision API extracted', extractedText.length, 'characters');
 
+    // Gemini processing
     console.log('🤖 Calling Gemini API...');
     const prompt = `You are a medical lab report parser. Extract patient info and all biomarker test results.
 Return ONLY valid JSON with NO markdown, NO explanations:
@@ -138,11 +180,8 @@ ${extractedText.substring(0, 15000)}`;
             console.log(`✅ Success with ${model}: Found ${result.biomarkers?.length || 0} biomarkers`);
             break;
           }
-        } else {
-          const errorText = await geminiResponse.text();
-          console.log(`${model} returned ${geminiResponse.status}:`, errorText);
         }
-      } catch (e: any) {
+      } catch (e) {
         console.log(`${model} failed:`, e.message);
       }
     }
@@ -153,9 +192,9 @@ ${extractedText.substring(0, 15000)}`;
 
     console.log('✅ Gemini parsed', result.biomarkers.length, 'biomarkers');
 
+    // Update profile
     if (result.patient && Object.keys(result.patient).length > 0) {
-      const profileUpdate: any = { updated_at: new Date().toISOString() };
-      
+      const profileUpdate = { updated_at: new Date().toISOString() };
       if (result.patient.firstName) profileUpdate.first_name = result.patient.firstName;
       if (result.patient.lastName) profileUpdate.last_name = result.patient.lastName;
       if (result.patient.dateOfBirth) profileUpdate.date_of_birth = result.patient.dateOfBirth;
@@ -165,21 +204,25 @@ ${extractedText.substring(0, 15000)}`;
           profileUpdate.gender = gender;
         }
       }
-
       await supabase.from('profiles').update(profileUpdate).eq('id', userId);
       console.log('✅ Profile updated');
     }
 
-    const { data: panelData, error: panelError } = await supabase.from('lab_panels').insert({
-      user_id: userId,
-      panel_name: panelName || 'Lab Report',
-      lab_provider: labProvider || null,
-      collection_date: collectionDate || new Date().toISOString().split('T')[0],
-      source_type: 'pdf_upload',
-      source_file_path: fileName || null,
-      processing_status: 'completed',
-      processed_at: new Date().toISOString()
-    }).select().single();
+    // Create lab panel with storage path
+    const { data: panelData, error: panelError } = await supabase
+      .from('lab_panels')
+      .insert({
+        user_id: userId,
+        panel_name: panelName || 'Lab Report',
+        lab_provider: labProvider || null,
+        collection_date: collectionDate || new Date().toISOString().split('T')[0],
+        source_type: 'pdf_upload',
+        source_file_path: storagePath, // Store the storage path
+        processing_status: 'completed',
+        processed_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
     if (panelError) {
       throw new Error(`Failed to create lab panel: ${panelError.message}`);
@@ -187,7 +230,8 @@ ${extractedText.substring(0, 15000)}`;
 
     console.log('✅ Lab panel created:', panelData.id);
 
-    const biomarkerInserts = result.biomarkers.map((b: any) => ({
+    // Insert biomarkers
+    const biomarkerInserts = result.biomarkers.map(b => ({
       lab_panel_id: panelData.id,
       marker_name: b.name,
       marker_category: b.category || 'General',
@@ -195,10 +239,13 @@ ${extractedText.substring(0, 15000)}`;
       unit: b.unit || null,
       reference_range_min: b.referenceMin ? parseFloat(b.referenceMin) : null,
       reference_range_max: b.referenceMax ? parseFloat(b.referenceMax) : null,
-      status: b.status || 'normal',
+      status: b.status || 'normal'
     }));
 
-    const { data: insertedBiomarkers, error: biomarkerError } = await supabase.from('biomarkers').insert(biomarkerInserts).select();
+    const { data: insertedBiomarkers, error: biomarkerError } = await supabase
+      .from('biomarkers')
+      .insert(biomarkerInserts)
+      .select();
 
     if (biomarkerError) {
       throw new Error(`Failed to insert biomarkers: ${biomarkerError.message}`);
@@ -206,16 +253,29 @@ ${extractedText.substring(0, 15000)}`;
 
     console.log('✅ Inserted', insertedBiomarkers.length, 'biomarkers');
 
-    return new Response(JSON.stringify({
-      success: true,
-      patient: result.patient,
-      biomarkers: insertedBiomarkers,
-      panelId: panelData.id,
-      extractedText: extractedText.substring(0, 500)
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(
+      JSON.stringify({
+        success: true,
+        patient: result.patient,
+        biomarkers: insertedBiomarkers,
+        panelId: panelData.id,
+        fileUrl: fileUrl,
+        storagePath: storagePath,
+        extractedText: extractedText.substring(0, 500)
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('❌ Error:', error.message);
-    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
   }
 });
