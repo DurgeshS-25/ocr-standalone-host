@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { processLabReportWithEdgeFunction } from "./ocrModule";
+import { UserDataViewer } from "./UserDataViewer";
 
-// Inline Supabase client - no separate file needed
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -10,6 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 function App() {
   const [session, setSession] = useState<any>(null);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [currentPage, setCurrentPage] = useState<"upload" | "data">("upload");
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -105,6 +106,7 @@ function App() {
     setPatientInfo(null);
     setMessage("");
     setError("");
+    setCurrentPage("upload");
   };
 
   const handleProcess = async () => {
@@ -264,123 +266,152 @@ function App() {
         </button>
       </div>
 
-      <div style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Upload Lab Report</h3>
-        
-        <div style={styles.uploadForm}>
-          <div>
-            <label style={styles.label}>Panel Name</label>
-            <input
-              style={styles.input}
-              placeholder="e.g., Complete Blood Count"
-              value={panelName}
-              onChange={(e) => setPanelName(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label style={styles.label}>Collection Date</label>
-            <input
-              style={styles.input}
-              type="date"
-              value={collectionDate}
-              onChange={(e) => setCollectionDate(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label style={styles.label}>Lab Provider</label>
-            <input
-              style={styles.input}
-              placeholder="e.g., Quest Diagnostics"
-              value={labProvider}
-              onChange={(e) => setLabProvider(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label style={styles.label}>Select PDF File</label>
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              style={{ ...styles.input, padding: "0.75rem" }}
-            />
-            {file && <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.25rem" }}>
-              Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-            </p>}
-          </div>
-
-          <button 
-            style={loading ? styles.btnDisabled : styles.btn} 
-            onClick={handleProcess} 
-            disabled={loading || !file}
-          >
-            {loading ? "⏳ Processing..." : "🚀 Upload & Analyze"}
-          </button>
-
-          {uploadProgress && (
-            <div style={styles.progressBox}>
-              {uploadProgress}
-            </div>
-          )}
-        </div>
-
-        {error && <div style={styles.errorBox}>{error}</div>}
-        {message && <div style={styles.successBox}>{message}</div>}
+      {/* Navigation Tabs */}
+      <div style={styles.navTabs}>
+        <button
+          onClick={() => setCurrentPage("upload")}
+          style={{
+            ...styles.navTab,
+            ...(currentPage === "upload" ? styles.navTabActive : styles.navTabInactive)
+          }}
+        >
+          📤 Upload Lab Report
+        </button>
+        <button
+          onClick={() => setCurrentPage("data")}
+          style={{
+            ...styles.navTab,
+            ...(currentPage === "data" ? styles.navTabActive : styles.navTabInactive)
+          }}
+        >
+          📊 View My Health Data
+        </button>
       </div>
 
-      {patientInfo && (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>👤 Patient Information</h3>
-          <div style={styles.patientGrid}>
-            <div>
-              <strong>Name:</strong> {patientInfo.firstName} {patientInfo.lastName}
-            </div>
-            <div>
-              <strong>DOB:</strong> {patientInfo.dateOfBirth}
-            </div>
-            <div>
-              <strong>Gender:</strong> {patientInfo.gender}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Page Content */}
+      {currentPage === "upload" ? (
+        <>
+          <div style={styles.card}>
+            <h3 style={{ marginTop: 0 }}>Upload Lab Report</h3>
+            
+            <div style={styles.uploadForm}>
+              <div>
+                <label style={styles.label}>Panel Name</label>
+                <input
+                  style={styles.input}
+                  placeholder="e.g., Complete Blood Count"
+                  value={panelName}
+                  onChange={(e) => setPanelName(e.target.value)}
+                />
+              </div>
 
-      {biomarkers.length > 0 && (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>🧪 Extracted Biomarkers ({biomarkers.length} tests)</h3>
-          <div style={styles.tableContainer}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Test Name</th>
-                  <th style={styles.th}>Result</th>
-                  <th style={styles.th}>Unit</th>
-                  <th style={styles.th}>Reference Range</th>
-                  <th style={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {biomarkers.map((b, i) => (
-                  <tr key={i} style={styles.tr}>
-                    <td style={styles.td}>{b.marker_name}</td>
-                    <td style={{ ...styles.td, fontWeight: 600 }}>{b.value}</td>
-                    <td style={styles.td}>{b.unit || '-'}</td>
-                    <td style={styles.td}>
-                      {b.reference_range_min && b.reference_range_max 
-                        ? `${b.reference_range_min} - ${b.reference_range_max}`
-                        : "-"}
-                    </td>
-                    <td style={styles.td}>
-                      <span style={getStatusBadge(b.status)}>{b.status || "normal"}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <div>
+                <label style={styles.label}>Collection Date</label>
+                <input
+                  style={styles.input}
+                  type="date"
+                  value={collectionDate}
+                  onChange={(e) => setCollectionDate(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={styles.label}>Lab Provider</label>
+                <input
+                  style={styles.input}
+                  placeholder="e.g., Quest Diagnostics"
+                  value={labProvider}
+                  onChange={(e) => setLabProvider(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={styles.label}>Select PDF File</label>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  style={{ ...styles.input, padding: "0.75rem" }}
+                />
+                {file && <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                  Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                </p>}
+              </div>
+
+              <button 
+                style={loading ? styles.btnDisabled : styles.btn} 
+                onClick={handleProcess} 
+                disabled={loading || !file}
+              >
+                {loading ? "⏳ Processing..." : "🚀 Upload & Analyze"}
+              </button>
+
+              {uploadProgress && (
+                <div style={styles.progressBox}>
+                  {uploadProgress}
+                </div>
+              )}
+            </div>
+
+            {error && <div style={styles.errorBox}>{error}</div>}
+            {message && <div style={styles.successBox}>{message}</div>}
           </div>
-        </div>
+
+          {patientInfo && (
+            <div style={styles.card}>
+              <h3 style={{ marginTop: 0 }}>👤 Patient Information</h3>
+              <div style={styles.patientGrid}>
+                <div>
+                  <strong>Name:</strong> {patientInfo.firstName} {patientInfo.lastName}
+                </div>
+                <div>
+                  <strong>DOB:</strong> {patientInfo.dateOfBirth}
+                </div>
+                <div>
+                  <strong>Gender:</strong> {patientInfo.gender}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {biomarkers.length > 0 && (
+            <div style={styles.card}>
+              <h3 style={{ marginTop: 0 }}>🧪 Extracted Biomarkers ({biomarkers.length} tests)</h3>
+              <div style={styles.tableContainer}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Test Name</th>
+                      <th style={styles.th}>Result</th>
+                      <th style={styles.th}>Unit</th>
+                      <th style={styles.th}>Reference Range</th>
+                      <th style={styles.th}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {biomarkers.map((b, i) => (
+                      <tr key={i} style={styles.tr}>
+                        <td style={styles.td}>{b.marker_name}</td>
+                        <td style={{ ...styles.td, fontWeight: 600 }}>{b.value}</td>
+                        <td style={styles.td}>{b.unit || '-'}</td>
+                        <td style={styles.td}>
+                          {b.reference_range_min && b.reference_range_max 
+                            ? `${b.reference_range_min} - ${b.reference_range_max}`
+                            : "-"}
+                        </td>
+                        <td style={styles.td}>
+                          <span style={getStatusBadge(b.status)}>{b.status || "normal"}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <UserDataViewer userId={session.user.id} />
       )}
     </div>
   );
@@ -424,6 +455,33 @@ const styles = {
   th: { padding: "0.75rem", textAlign: "left" as const, borderBottom: "2px solid #444", color: "#aaa", fontWeight: 600 },
   td: { padding: "0.75rem", borderBottom: "1px solid #333" },
   tr: { transition: "background 0.2s" },
+  navTabs: { 
+    display: "flex", 
+    gap: "0.5rem", 
+    marginBottom: "1.5rem", 
+    background: "#0b1020", 
+    padding: "0.5rem", 
+    borderRadius: "12px",
+    border: "1px solid rgba(255,255,255,0.1)"
+  },
+  navTab: { 
+    flex: 1, 
+    padding: "1rem", 
+    border: "none", 
+    borderRadius: "8px", 
+    cursor: "pointer", 
+    fontSize: "1rem", 
+    fontWeight: 600,
+    transition: "all 0.2s"
+  },
+  navTabActive: { 
+    background: "#007bff", 
+    color: "#fff" 
+  },
+  navTabInactive: { 
+    background: "transparent", 
+    color: "#888" 
+  },
 };
 
 export default App;
