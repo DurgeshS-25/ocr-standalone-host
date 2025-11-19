@@ -1,6 +1,13 @@
 // src/UserDataViewer.tsx
+// src/UserDataViewer.tsx
 import { useState } from "react";
-import { supabase } from "./supabaseClient";
+import { createClient } from "@supabase/supabase-js";
+
+// Create client inline
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL!,
+  import.meta.env.VITE_SUPABASE_ANON_KEY!
+);
 
 interface UserDataViewerProps {
   userId: string;
