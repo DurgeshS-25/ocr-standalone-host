@@ -2,29 +2,32 @@
 import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// Create client inline
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL!,
   import.meta.env.VITE_SUPABASE_ANON_KEY!
 );
-interface UserDataViewerProps {
-  userId: string;
-}
 
-export function UserDataViewer({ userId }: UserDataViewerProps) {
+export function UserDataViewer() {
+  const [searchUserId, setSearchUserId] = useState("");
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const fetchUserData = async () => {
+    if (!searchUserId.trim()) {
+      setError("Please enter a User ID");
+      return;
+    }
+
     try {
       setLoading(true);
       setError("");
+      setUserData(null);
 
-      console.log("📥 Fetching user data for:", userId);
+      console.log("📥 Fetching user data for:", searchUserId);
 
       const { data, error } = await supabase.functions.invoke("get-user-data", {
-        body: { userId }
+        body: { userId: searchUserId.trim() }
       });
 
       if (error) {
@@ -41,8 +44,15 @@ export function UserDataViewer({ userId }: UserDataViewerProps) {
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to fetch user data");
+      setUserData(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      fetchUserData();
     }
   };
 
@@ -60,16 +70,30 @@ export function UserDataViewer({ userId }: UserDataViewerProps) {
       <div style={styles.card}>
         <h2 style={{ marginTop: 0 }}>📊 Complete Health Profile</h2>
         <p style={{ color: "#888", marginBottom: "1.5rem" }}>
-          View all your health data in one place
+          Enter a User ID to retrieve complete health data
         </p>
         
-        <button
-          style={loading ? styles.btnDisabled : styles.btn}
-          onClick={fetchUserData}
-          disabled={loading}
-        >
-          {loading ? "⏳ Loading All Data..." : "📥 Fetch Complete Health Data"}
-        </button>
+        {/* Search Input */}
+        <div style={styles.searchContainer}>
+          <div style={{ flex: 1 }}>
+            <label style={styles.label}>User ID (from pilot_user_data)</label>
+            <input
+              style={styles.input}
+              type="text"
+              placeholder="e.g., 123e4567-e89b-12d3-a456-426614174000"
+              value={searchUserId}
+              onChange={(e) => setSearchUserId(e.target.value)}
+              onKeyPress={handleKeyPress}
+            />
+          </div>
+          <button
+            style={loading ? styles.btnDisabled : styles.btnSearch}
+            onClick={fetchUserData}
+            disabled={loading || !searchUserId.trim()}
+          >
+            {loading ? "⏳ Loading..." : "🔍 Search"}
+          </button>
+        </div>
 
         {error && <div style={styles.errorBox}>{error}</div>}
       </div>
@@ -77,6 +101,15 @@ export function UserDataViewer({ userId }: UserDataViewerProps) {
       {/* Summary Cards */}
       {userData && (
         <>
+          <div style={styles.card}>
+            <h3 style={{ margin: "0 0 1rem 0", color: "#4CAF50" }}>
+              ✅ User Found: {userData.userData.profile.first_name} {userData.userData.profile.last_name}
+            </h3>
+            <p style={{ margin: 0, color: "#888", fontSize: "0.9rem" }}>
+              User ID: {userData.userId}
+            </p>
+          </div>
+
           <div style={styles.summaryGrid}>
             <div style={styles.summaryCard}>
               <div style={styles.summaryIcon}>🧪</div>
@@ -156,6 +189,9 @@ export function UserDataViewer({ userId }: UserDataViewerProps) {
                 <div>
                   <strong>BMI:</strong> {userData.userData.profile.bmi.toFixed(1)}
                 </div>
+                <div>
+                  <strong>Consent:</strong> {userData.userData.profile.consent_flag ? "✅ Yes" : "❌ No"}
+                </div>
               </div>
             </div>
           )}
@@ -189,6 +225,11 @@ export function UserDataViewer({ userId }: UserDataViewerProps) {
                     ))}
                   </tbody>
                 </table>
+                {userData.userData.biomarkers.length > 10 && (
+                  <p style={{ marginTop: "1rem", color: "#888", fontSize: "0.9rem" }}>
+                    ... and {userData.userData.biomarkers.length - 10} more biomarkers
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -213,11 +254,11 @@ export function UserDataViewer({ userId }: UserDataViewerProps) {
                     {userData.userData.wearableData.slice(0, 7).map((w: any) => (
                       <tr key={w.id} style={styles.tr}>
                         <td style={styles.td}>{w.date}</td>
-                        <td style={styles.td}>{w.steps || '-'}</td>
+                        <td style={styles.td}>{w.steps?.toLocaleString() || '-'}</td>
                         <td style={styles.td}>{w.resting_hr || '-'}</td>
                         <td style={styles.td}>{w.hrv_rmssd || '-'}</td>
-                        <td style={styles.td}>{w.sleep_hours ? `${w.sleep_hours}h` : '-'}</td>
-                        <td style={styles.td}>{w.spo2_avg ? `${w.spo2_avg}%` : '-'}</td>
+                        <td style={styles.td}>{w.sleep_hours ? `${w.sleep_hours.toFixed(1)}h` : '-'}</td>
+                        <td style={styles.td}>{w.spo2_avg ? `${w.spo2_avg.toFixed(1)}%` : '-'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -240,6 +281,9 @@ export function UserDataViewer({ userId }: UserDataViewerProps) {
                   </div>
                   <div style={styles.genomicRow}>
                     <strong>CVD Risk Score:</strong> {g.polygenic_score_cvd?.toFixed(2) || "N/A"}
+                  </div>
+                  <div style={styles.genomicRow}>
+                    <strong>Annotation Version:</strong> {g.annotation_version || "N/A"}
                   </div>
                   <div style={styles.genomicRow}>
                     <strong>Processed:</strong> {new Date(g.processed_at).toLocaleDateString()}
@@ -272,7 +316,11 @@ export function UserDataViewer({ userId }: UserDataViewerProps) {
                         <td style={styles.td}>{m.frequency || '-'}</td>
                         <td style={styles.td}>{m.start_date}</td>
                         <td style={styles.td}>
-                          {m.end_date ? `Ended ${m.end_date}` : '✅ Active'}
+                          {m.end_date ? (
+                            <span style={{ color: "#888" }}>Ended {m.end_date}</span>
+                          ) : (
+                            <span style={{ color: "#4CAF50" }}>✅ Active</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -310,28 +358,52 @@ const styles = {
     borderRadius: "12px", 
     border: "1px solid rgba(255,255,255,0.1)" 
   },
-  btn: { 
+  searchContainer: {
+    display: "flex",
+    gap: "1rem",
+    alignItems: "flex-end"
+  },
+  label: { 
+    display: "block", 
+    marginBottom: "0.5rem", 
+    fontSize: "0.9rem", 
+    color: "#aaa", 
+    fontWeight: 500 
+  },
+  input: { 
+    width: "100%", 
+    padding: "0.75rem", 
+    borderRadius: "8px", 
+    border: "1px solid #444", 
+    background: "#050816", 
+    color: "#fff", 
+    fontSize: "0.95rem", 
+    boxSizing: "border-box" as const 
+  },
+  btnSearch: { 
     background: "#007bff", 
     border: "none", 
     borderRadius: "8px", 
-    padding: "1rem 2rem", 
+    padding: "0.75rem 2rem", 
     color: "#fff", 
     cursor: "pointer", 
     fontWeight: 600, 
     fontSize: "1rem",
-    width: "100%"
+    whiteSpace: "nowrap" as const,
+    minWidth: "150px"
   },
   btnDisabled: { 
     background: "#555", 
     border: "none", 
     borderRadius: "8px", 
-    padding: "1rem 2rem", 
+    padding: "0.75rem 2rem", 
     color: "#fff", 
     cursor: "not-allowed", 
     fontWeight: 600, 
     fontSize: "1rem", 
     opacity: 0.5,
-    width: "100%"
+    whiteSpace: "nowrap" as const,
+    minWidth: "150px"
   },
   errorBox: { 
     padding: "0.875rem", 
